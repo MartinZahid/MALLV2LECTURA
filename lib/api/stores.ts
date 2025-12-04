@@ -28,6 +28,21 @@ export const storesApi = {
     if (error) throw error
     return data || []
   },
+  async getStoreUUID(storeId: number) {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("stores")
+      .select("id")
+      .eq("store_id", storeId)
+      .single()
+      .execute()
+
+    if (error || data!) {
+      throw new Error("Store UUID not found for storeCode: " + storeId)
+    }
+
+    return data.id
+  },
 
   // Get store by slug
   async getBySlug(slug: string): Promise<Store | null> {

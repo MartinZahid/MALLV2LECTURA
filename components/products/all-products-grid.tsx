@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ProductCard } from "./product-card"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -12,13 +12,15 @@ export function AllProductsGrid() {
   const [activeTab, setActiveTab] = useState("all")
   const { toast } = useToast()
 
-  if (error) {
-    toast({
-      title: "Error",
-      description: "No se pudieron cargar los productos",
-      variant: "destructive",
-    })
-  }
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los productos",
+        variant: "destructive",
+      })
+    }
+  }, [error, toast])
 
   if (loading) {
     return (
