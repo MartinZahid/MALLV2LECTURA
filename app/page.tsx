@@ -4,6 +4,7 @@ import { FeaturesSection } from "@/components/home/features-section"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 
+
 export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-background via-background to-muted/20">

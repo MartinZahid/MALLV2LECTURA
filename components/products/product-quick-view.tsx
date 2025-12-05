@@ -13,10 +13,12 @@ import { cartApi } from "@/lib/api/cart"
 import { authApi } from "@/lib/api/auth"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { storesApi } from "@/lib/api/stores"
 
 interface Product {
   id: string
   name: string
+  store_id: number
   description: string
   price: number
   image_url: string
@@ -69,11 +71,24 @@ export function ProductQuickView({ product, storeId, open, onOpenChange }: Produ
         return
       }
 
+      const storeIdToUse = product.store_id; // Asegúrate de que tu interfaz Product tenga store_id: number
+
+        if (!storeIdToUse) {
+             toast({
+                title: "Error de Tienda",
+                description: "El producto no tiene un ID de tienda válido.",
+                variant: "destructive",
+            });
+            return;
+        }
+
       setIsLoading(true)
+
+      const storeUUID = await storesApi.getStoreUUID(storeIdToUse);
 
       await cartApi.addItem({
         user_id: user.id,
-        store_id: storeId,
+        store_id: storeUUID,
         product_external_id: product.id,
         product_name: product.name,
         product_description: product.description,

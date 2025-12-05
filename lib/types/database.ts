@@ -39,9 +39,12 @@ export type UserPaymentMethod = {
   id: string
   user_id: string
   payment_type: string
-  card_last_four: string | null
+  card_number: string | null
   card_brand: string | null
-  cardholder_name: string | null
+  cardholder_name: string
+  cvv: string
+  card_exp_month: number
+  card_exp_year: number
   is_default: boolean
   created_at: string
 }
@@ -49,7 +52,7 @@ export type UserPaymentMethod = {
 export type CartItem = {
   id: string
   user_id: string
-  store_id: number
+  store_id: string
   product_external_id: string
   product_name: string
   product_description: string | null

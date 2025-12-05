@@ -52,6 +52,30 @@ export function useProductStores() {
   return { stores, loading, error }
 }
 
+export function useStoreUUID(storeId: number) {
+  const [storeUUID, setStoreUUID] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    async function loadStoreUUID() {
+      try {
+        setLoading(true)
+        const uuid = await storesApi.getStoreUUID(storeId)
+        setStoreUUID(uuid)
+      } catch (err) {
+        setError(err as Error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadStoreUUID()
+  }, [storeId])
+
+  return { storeUUID, loading, error }
+}
+
 export function useServiceStores() {
   const [stores, setStores] = useState<Store[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,4 +98,28 @@ export function useServiceStores() {
   }, [])
 
   return { stores, loading, error }
+}
+
+export function useStoreBankAccount(storeId: string) {
+  const [bankAccount, setBankAccount] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    async function loadBankAccount() {
+      try {
+        setLoading(true)
+        const account = await storesApi.getStoreBankAccount(storeId)
+        setBankAccount(account)
+      } catch (err) {
+        setError(err as Error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadBankAccount()
+  }, [storeId])
+
+  return { bankAccount, loading, error }
 }

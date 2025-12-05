@@ -24,6 +24,9 @@ export function PaymentMethodDialog({ open, onOpenChange, onPaymentMethodAdded }
   const [formData, setFormData] = useState({
     cardholder_name: "",
     card_number: "",
+    cvv: "",
+    card_exp_month: "",
+    card_exp_year: "",
     card_brand: "visa",
     is_default: false,
   })
@@ -42,14 +45,15 @@ export function PaymentMethodDialog({ open, onOpenChange, onPaymentMethodAdded }
       if (!user) throw new Error("Usuario no autenticado")
 
       // In production, this would tokenize the card with a payment processor
-      const lastFour = formData.card_number.slice(-4)
-
       const { data, error } = await supabase
         .from("user_payment_methods")
         .insert({
           user_id: user.id,
           payment_type: "card",
-          card_last_four: lastFour,
+          card_number: formData.card_number,
+          cvv: formData.cvv,
+          card_exp_month: formData.card_exp_month, // Placeholder
+          card_exp_year: formData.card_exp_year, // Placeholder
           card_brand: formData.card_brand,
           cardholder_name: formData.cardholder_name,
           is_default: formData.is_default,
@@ -69,6 +73,9 @@ export function PaymentMethodDialog({ open, onOpenChange, onPaymentMethodAdded }
       setFormData({
         cardholder_name: "",
         card_number: "",
+        cvv: "",
+        card_exp_month: "",
+        card_exp_year: "",
         card_brand: "visa",
         is_default: false,
       })
@@ -108,6 +115,39 @@ export function PaymentMethodDialog({ open, onOpenChange, onPaymentMethodAdded }
               value={formData.card_number}
               onChange={(e) => setFormData({ ...formData, card_number: e.target.value.replace(/\s/g, "") })}
               maxLength={16}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cvv">CVV</Label>
+            <Input
+              id="cvv"
+              placeholder="123"
+              value={formData.cvv}
+              onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
+              maxLength={4}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="card_exp_month">Mes de expiración</Label>
+            <Input
+              id="card_exp_month"
+              placeholder="MM"
+              value={formData.card_exp_month}
+              onChange={(e) => setFormData({ ...formData, card_exp_month: e.target.value })}
+              maxLength={2}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="card_exp_year">Año de expiración</Label>
+            <Input
+              id="card_exp_year"
+              placeholder="YYYY"
+              value={formData.card_exp_year}
+              onChange={(e) => setFormData({ ...formData, card_exp_year: e.target.value })}
+              maxLength={4}
               required
             />
           </div>

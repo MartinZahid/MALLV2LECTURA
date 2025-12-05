@@ -28,6 +28,7 @@ export function useProducts(storeId?: number) {
 
         const mapped = data.map((p: any) => ({
           id: p.id,
+          store_id: p.store_id,
           name: p.nombre,
           description: p.description,
           price: p.precio,

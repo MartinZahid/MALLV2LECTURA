@@ -30,7 +30,7 @@ export default async function CheckoutPage() {
       <main className="flex-1 bg-background">
         <div className="container mx-auto px-4 py-8">
           <h1 className="font-serif text-3xl md:text-4xl font-bold text-foreground mb-8">Finalizar Compra</h1>
-          <CheckoutForm cartItems={cartItems} addresses={addresses || []} paymentMethods={paymentMethods || []} />
+          <CheckoutForm cartItems={cartItems} addresses={addresses || []} paymentMethods={paymentMethods || []} storeId={cartItems[0]?.store.id} />
         </div>
       </main>
       <Footer />

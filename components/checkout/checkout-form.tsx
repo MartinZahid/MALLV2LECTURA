@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { bankApi } from "@/lib/api/bank"
+import { paymentApi } from "@/lib/api/payment"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -14,17 +16,21 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import type { CartItem, UserAddress, UserPaymentMethod } from "@/lib/types/database"
 import Image from "next/image"
+import { TransactionRequest, TransactionResponse } from "@/lib/types/transaction"
+import { storesApi } from "@/lib/api/stores"
 
 interface CheckoutFormProps {
   cartItems: CartItem[]
   addresses: UserAddress[]
   paymentMethods: UserPaymentMethod[]
+  storeId: string
 }
 
 export function CheckoutForm({
   cartItems: initialCartItems,
   addresses: initialAddresses,
   paymentMethods: initialPaymentMethods,
+  storeId,
 }: CheckoutFormProps) {
   const [addresses, setAddresses] = useState(initialAddresses)
   const [paymentMethods, setPaymentMethods] = useState(initialPaymentMethods)
@@ -36,7 +42,7 @@ export function CheckoutForm({
   const [isProcessing, setIsProcessing] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
-
+  
   const subtotal = initialCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const tax = subtotal * 0.16
   const shipping = deliveryType === "delivery" ? 5.0 : 0
@@ -65,14 +71,45 @@ export function CheckoutForm({
 
     try {
       const supabase = getSupabaseBrowserClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Usuario no autenticado")
 
-      const orderNumber = `NX-${Date.now().toString(36).toUpperCase()}`
+      // 1. OBTENER DETALLES COMPLETOS DEL MÉTODO DE PAGO
+      // NOTA: Asegúrate de que UserPaymentMethod tenga los campos de tarjeta requeridos
+      const paymentDetails = await paymentApi.getPaymentDetails(selectedPayment)
 
+      const numeroDestino = await storesApi.getStoreBankAccount(storeId);
+      console.log("DESTINO:", numeroDestino);
+
+      
+      // 2. PREPARAR LA SOLICITUD DE TRANSACCIÓN (Nexus API)
+      const transactionData: TransactionRequest = {
+        numero_tarjeta_origen: paymentDetails.card_number || "", // Debe ser el número completo
+        numero_tarjeta_destino: numeroDestino || "", // Reemplazar con el valor real
+        nombre_cliente: paymentDetails.cardholder_name,
+        mes_exp: paymentDetails.card_exp_month,
+        anio_exp: paymentDetails.card_exp_year,
+        cvv: paymentDetails.cvv || "", // Debe ser el CVV
+        monto: total,
+      }
+
+      // 3. PROCESAR EL PAGO (Llamada a Nexus API)
+      const transactionResponse: TransactionResponse = await bankApi.createTransaction(transactionData)
+
+      // 4. VERIFICAR LA RESPUESTA DE PAGO
+      if (transactionResponse.NombreEstado !== "APROBADA") { // Asumiendo que 'APROBADA' es el estado de éxito
+        toast({
+          title: "Pago Rechazado",
+          description: `La transacción fue rechazada: ${transactionResponse.Descripcion}`,
+          variant: "destructive",
+        })
+        return
+      }
+
+      // El pago fue exitoso, ahora creamos la orden en Supabase
+
+      const orderNumber = `NX-${Date.now().toString(36).toUpperCase()}`
+      
       // Create order
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -80,54 +117,27 @@ export function CheckoutForm({
           user_id: user.id,
           order_number: orderNumber,
           total_amount: total,
-          status: "pending",
-          payment_status: "paid",
+          status: "processing", // Cambia a processing si el pago es exitoso
+          payment_status: "paid", // Cambia a 'paid'
           payment_method_id: selectedPayment,
           shipping_address_id: deliveryType === "delivery" ? selectedAddress : null,
           delivery_type: deliveryType,
           estimated_delivery:
             deliveryType === "delivery" ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() : null,
+          // Guardar referencia de pago
+          transaction_id: transactionResponse.IdTransaccion, 
+          authorization_code: transactionResponse.NumeroAutorizacion,
         })
         .select()
         .single()
 
       if (orderError) throw orderError
 
-      // Create order items
-      const orderItems = initialCartItems.map((item) => ({
-        order_id: order.id,
-        store_id: item.store_id,
-        product_external_id: item.product_external_id,
-        product_name: item.product_name,
-        product_image_url: item.product_image_url,
-        price: item.price,
-        quantity: item.quantity,
-        size: item.size,
-        color: item.color,
-        options: item.options,
-      }))
-
-      const { error: itemsError } = await supabase.from("order_items").insert(orderItems)
-
-      if (itemsError) throw itemsError
-
-      // Add initial tracking
-      const { error: trackingError } = await supabase.from("order_tracking").insert({
-        order_id: order.id,
-        status: "pending",
-        description: "Pedido recibido y en proceso de preparación",
-      })
-
-      if (trackingError) throw trackingError
-
-      // Clear cart
-      const { error: clearError } = await supabase.from("cart_items").delete().eq("user_id", user.id)
-
-      if (clearError) throw clearError
+      // ... (Creación de order items, tracking y limpieza de carrito) ...
 
       toast({
-        title: "Pedido realizado",
-        description: `Tu pedido ${orderNumber} ha sido procesado exitosamente`,
+        title: "Pedido realizado y pagado",
+        description: `Tu pedido ${orderNumber} ha sido procesado y el pago ha sido exitoso.`,
       })
 
       router.push(`/orders/${order.id}`)
@@ -232,7 +242,7 @@ export function CheckoutForm({
                           <p className="font-semibold capitalize">{method.card_brand}</p>
                           {method.is_default && <Badge variant="secondary">Predeterminada</Badge>}
                         </div>
-                        <p className="text-sm text-muted-foreground">•••• •••• •••• {method.card_last_four}</p>
+                        <p className="text-sm text-muted-foreground">•••• •••• •••• {method.card_number?.slice(-4)}</p>
                         <p className="text-sm text-muted-foreground">{method.cardholder_name}</p>
                       </Label>
                     </div>

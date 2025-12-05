@@ -62,7 +62,7 @@ export function PaymentMethodList({ paymentMethods: initialMethods }: PaymentMet
                   {method.is_default && <Badge variant="secondary">Predeterminada</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  •••• •••• •••• {method.card_last_four}
+                  •••• •••• •••• {method.card_number?.slice(-4)}
                   <br />
                   {method.cardholder_name}
                 </p>

@@ -10,6 +10,7 @@ import { ProductQuickView } from "./product-quick-view"
 
 interface Product {
   id: string
+  store_id: number
   name: string
   description: string
   price: number

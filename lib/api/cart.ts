@@ -18,6 +18,7 @@ export const cartApi = {
   // Add item to cart
   async addItem(item: Omit<CartItem, "id" | "added_at">): Promise<CartItem> {
     const supabase = createClient()
+    console.log("Adding item to cart:", item)
     const { data, error } = await supabase.from("cart_items").insert(item).select().single()
 
     if (error) throw error

@@ -28,21 +28,41 @@ export const storesApi = {
     if (error) throw error
     return data || []
   },
-  async getStoreUUID(storeId: number) {
+  async getStoreBankAccount(storeId: string): Promise<string> {
     const supabase = createClient()
+    const { data, error } = await supabase
+      .from("stores")
+      .select("bank_account")
+      .eq("id", storeId)
+      .single()
+
+    if (error) throw error
+    if (!data) throw new Error("Store bank account not found for storeCode: " + storeId)
+    return data.bank_account
+  },
+  async getStoreUUID(storeId: number): Promise<string> {
+    const supabase = createClient()
+    
+    // NOTA: Se recomienda remover .execute() ya que .single() lo maneja.
     const { data, error } = await supabase
       .from("stores")
       .select("id")
       .eq("store_id", storeId)
-      .single()
-      .execute()
+      .single() // Ejecuta la consulta
 
-    if (error || data!) {
-      throw new Error("Store UUID not found for storeCode: " + storeId)
+    if (error) {
+        // Manejar errores de Supabase (por ejemplo, error de conexión, RLS, etc.)
+        throw error;
     }
-
-    return data.id
-  },
+    
+    if (!data) {
+        // Manejar el caso donde no se encontró la tienda (si .single() no lanza error al no encontrar)
+        throw new Error("Store UUID not found for storeCode: " + storeId);
+    }
+    
+    // Si llegamos aquí, la consulta fue exitosa y data tiene el objeto { id: <UUID> }
+    return data.id;
+},
 
   // Get store by slug
   async getBySlug(slug: string): Promise<Store | null> {
