@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronRight, Calendar, Clock } from "lucide-react"
 import type { Appointment } from "@/lib/types/database"
 
+
 interface AppointmentCardProps {
   appointment: Appointment
 }

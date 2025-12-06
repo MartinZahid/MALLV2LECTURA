@@ -55,92 +55,97 @@ export function ProductQuickView({ product, storeId, open, onOpenChange }: Produ
     : product.price
 
  const handleAddToCart = async () => {
-    try {
-      console.log("1. Iniciando addToCart...");
-      const user = await authApi.getCurrentUser()
+    try {
+      console.log("1. Iniciando addToCart...")
+      const user = await authApi.getCurrentUser()
 
-      if (!user) {
-        toast({
-          title: "Inicia sesión",
-          description: "Debes iniciar sesión para agregar productos al carrito",
-          variant: "destructive",
-        })
-        router.push("/auth/login?redirect=/cart")
-        return
-      }
+      if (!user) {
+        toast({ title: "Inicia sesión", description: "Debes iniciar sesión", variant: "destructive" })
+        router.push("/auth/login?redirect=/cart")
+        return
+      }
 
-      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-        toast({
-          title: "Selecciona una talla",
-          description: "Por favor selecciona una talla antes de agregar al carrito",
-          variant: "destructive",
-        })
-        return
-      }
+      // Validaciones básicas
+      if (product.sizes?.length && !selectedSize) {
+        toast({ title: "Falta talla", description: "Selecciona una talla", variant: "destructive" })
+        return
+      }
+      
+      const storeIdToUse = product.store_id
+      if (!storeIdToUse) {
+        toast({ title: "Error", description: "Tienda no identificada", variant: "destructive" })
+        return
+      }
 
-   
-      const storeIdToUse = product.store_id; 
-      console.log('Objeto completo:', product);
-      console.log("2. ID de tienda detectado:", storeIdToUse);
+      setIsLoading(true)
 
-      if (!storeIdToUse) {
-        toast({ title: "Error", description: "No se identificó la tienda.", variant: "destructive" });
-        return;
-      }
+      // 1. Obtener carrito actual
+      const currentCart = await cartApi.getItems(user.id)
 
-      setIsLoading(true)
+      // 2. Buscar si el producto EXACTO ya existe (ID + Talla + Color)
+      const existingItem = currentCart.find((item) => {
+        const sameId = String(item.product_external_id) === String(product.id)
+        const sameSize = item.size === (selectedSize || null) 
+        const sameColor = item.color === (selectedColor || null) 
+        return sameId && sameSize && sameColor
+      })
 
-      // CORRECCIÓN 2: Agregamos la validación de stock que faltaba
-      console.log("3. Verificando stock con API...");
-      const hasStock = await availabilityApi.checkStock(storeIdToUse, product.id, quantity);
-      console.log("4. ¿Hay stock?:", hasStock);
+      const quantityInCart = existingItem ? existingItem.quantity : 0
+      const totalQuantityToCheck = quantityInCart + quantity
+
+      // 3. Validar Stock Total
+      const hasStock = await availabilityApi.checkStock(storeIdToUse, product.id, totalQuantityToCheck)
 
       if (!hasStock) {
         toast({
           title: "Stock insuficiente",
-          description: `Lo sentimos, la tienda no cuenta con ${quantity} unidades disponibles.`,
+          description: quantityInCart > 0 
+            ? `Hay ${quantityInCart} en el carrito. No hay stock para agregar ${quantity} más.` 
+            : "No hay suficiente stock disponible.",
           variant: "destructive",
         })
-        setIsLoading(false) // Apagamos la carga
-        return; // Detenemos el proceso
+        setIsLoading(false)
+        return
       }
 
-      console.log("5. Stock OK. Obteniendo UUID...");
-      const storeUUID = await storesApi.getStoreUUID(storeIdToUse);
+      // 4. DECISIÓN: ¿Actualizar o Insertar?
+      if (existingItem) {
+        // CASO A: Ya existe -> ACTUALIZAMOS la cantidad
+        console.log("Producto existente detectado. Actualizando cantidad...")
+        await cartApi.updateQuantity(existingItem.id, totalQuantityToCheck)
+        
+        toast({ title: "Carrito actualizado", description: `Ahora tienes ${totalQuantityToCheck} unidades.` })
+      } else {
+        // CASO B: Es nuevo -> INSERTAMOS nueva fila
+        console.log("Producto nuevo. Agregando...")
+        const storeUUID = await storesApi.getStoreUUID(storeIdToUse)
+        
+        await cartApi.addItem({
+          user_id: user.id,
+          store_id: storeUUID,
+          product_external_id: product.id,
+          product_name: product.name,
+          product_description: product.description,
+          product_image_url: product.image_url,
+          price: finalPrice,
+          quantity: quantity, // Aquí solo va la cantidad nueva inicial
+          size: selectedSize || null,
+          color: selectedColor || null,
+          is_available: product.in_stock,
+        })
+        
+        toast({ title: "Producto agregado", description: `${product.name} se agregó al carrito` })
+      }
 
-      await cartApi.addItem({
-        user_id: user.id,
-        store_id: storeUUID,
-        product_external_id: product.id,
-        product_name: product.name,
-        product_description: product.description,
-        product_image_url: product.image_url,
-        price: finalPrice,
-        quantity,
-        size: selectedSize || null,
-        color: selectedColor || null,
-        is_available: product.in_stock,
-      })
-
-      toast({
-        title: "Producto agregado",
-        description: `${product.name} se agregó a tu carrito`,
-      })
-
-      onOpenChange(false)
-      router.refresh()
-
-    } catch (error: any) {
-      console.error("ERROR FINAL:", error);
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo agregar el producto al carrito",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+      onOpenChange(false)
+      router.refresh()
+    } catch (error: any) {
+      console.error("ERROR FINAL:", error)
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
   const handleAddToWishlist = async () => {
     const supabase = getSupabaseBrowserClient()
     const {
