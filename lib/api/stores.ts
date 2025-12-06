@@ -28,6 +28,18 @@ export const storesApi = {
     if (error) throw error
     return data || []
   },
+  async getRegisterApiUrl(storeId: string): Promise<string> {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("stores")
+      .select("registro_venta_api")
+      .eq("id", storeId)
+      .single()
+
+    if (error) throw error
+    if (!data) throw new Error("Store API URL not found for storeCode: " + storeId)
+    return data.register_api_url
+  },
   async getStoreBankAccount(storeId: string): Promise<string> {
     const supabase = createClient()
     const { data, error } = await supabase

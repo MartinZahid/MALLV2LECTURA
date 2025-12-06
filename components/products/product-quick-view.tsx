@@ -15,6 +15,12 @@ import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { storesApi } from "@/lib/api/stores"
 
+
+import { availabilityApi } from "@/lib/api/availability";
+
+
+
+
 interface Product {
   id: string
   name: string
@@ -35,8 +41,8 @@ interface ProductQuickViewProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
 export function ProductQuickView({ product, storeId, open, onOpenChange }: ProductQuickViewProps) {
+  // ... (tus estados se mantienen igual)
   const [selectedSize, setSelectedSize] = useState<string>("")
   const [selectedColor, setSelectedColor] = useState<string>("")
   const [quantity, setQuantity] = useState(1)
@@ -48,76 +54,93 @@ export function ProductQuickView({ product, storeId, open, onOpenChange }: Produ
     ? product.price * (1 - product.discount_percentage / 100)
     : product.price
 
-  const handleAddToCart = async () => {
-    try {
-      const user = await authApi.getCurrentUser()
+ const handleAddToCart = async () => {
+    try {
+      console.log("1. Iniciando addToCart...");
+      const user = await authApi.getCurrentUser()
 
-      if (!user) {
+      if (!user) {
+        toast({
+          title: "Inicia sesión",
+          description: "Debes iniciar sesión para agregar productos al carrito",
+          variant: "destructive",
+        })
+        router.push("/auth/login?redirect=/cart")
+        return
+      }
+
+      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+        toast({
+          title: "Selecciona una talla",
+          description: "Por favor selecciona una talla antes de agregar al carrito",
+          variant: "destructive",
+        })
+        return
+      }
+
+   
+      const storeIdToUse = product.store_id; 
+      console.log('Objeto completo:', product);
+      console.log("2. ID de tienda detectado:", storeIdToUse);
+
+      if (!storeIdToUse) {
+        toast({ title: "Error", description: "No se identificó la tienda.", variant: "destructive" });
+        return;
+      }
+
+      setIsLoading(true)
+
+      // CORRECCIÓN 2: Agregamos la validación de stock que faltaba
+      console.log("3. Verificando stock con API...");
+      const hasStock = await availabilityApi.checkStock(storeIdToUse, product.id, quantity);
+      console.log("4. ¿Hay stock?:", hasStock);
+
+      if (!hasStock) {
         toast({
-          title: "Inicia sesión",
-          description: "Debes iniciar sesión para agregar productos al carrito",
+          title: "Stock insuficiente",
+          description: `Lo sentimos, la tienda no cuenta con ${quantity} unidades disponibles.`,
           variant: "destructive",
         })
-        router.push("/auth/login?redirect=/cart")
-        return
+        setIsLoading(false) // Apagamos la carga
+        return; // Detenemos el proceso
       }
 
-      if (product.sizes && product.sizes.length > 0 && !selectedSize) {
-        toast({
-          title: "Selecciona una talla",
-          description: "Por favor selecciona una talla antes de agregar al carrito",
-          variant: "destructive",
-        })
-        return
-      }
+      console.log("5. Stock OK. Obteniendo UUID...");
+      const storeUUID = await storesApi.getStoreUUID(storeIdToUse);
 
-      const storeIdToUse = product.store_id; // Asegúrate de que tu interfaz Product tenga store_id: number
+      await cartApi.addItem({
+        user_id: user.id,
+        store_id: storeUUID,
+        product_external_id: product.id,
+        product_name: product.name,
+        product_description: product.description,
+        product_image_url: product.image_url,
+        price: finalPrice,
+        quantity,
+        size: selectedSize || null,
+        color: selectedColor || null,
+        is_available: product.in_stock,
+      })
 
-        if (!storeIdToUse) {
-             toast({
-                title: "Error de Tienda",
-                description: "El producto no tiene un ID de tienda válido.",
-                variant: "destructive",
-            });
-            return;
-        }
+      toast({
+        title: "Producto agregado",
+        description: `${product.name} se agregó a tu carrito`,
+      })
 
-      setIsLoading(true)
+      onOpenChange(false)
+      router.refresh()
 
-      const storeUUID = await storesApi.getStoreUUID(storeIdToUse);
-
-      await cartApi.addItem({
-        user_id: user.id,
-        store_id: storeUUID,
-        product_external_id: product.id,
-        product_name: product.name,
-        product_description: product.description,
-        product_image_url: product.image_url,
-        price: finalPrice,
-        quantity,
-        size: selectedSize || null,
-        color: selectedColor || null,
-        is_available: product.in_stock,
-      })
-
-      toast({
-        title: "Producto agregado",
-        description: `${product.name} se agregó a tu carrito`,
-      })
-
-      onOpenChange(false)
-      router.refresh()
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo agregar el producto al carrito",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
+    } catch (error: any) {
+      console.error("ERROR FINAL:", error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo agregar el producto al carrito",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
   const handleAddToWishlist = async () => {
     const supabase = getSupabaseBrowserClient()
     const {

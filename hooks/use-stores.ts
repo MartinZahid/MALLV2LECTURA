@@ -100,6 +100,29 @@ export function useServiceStores() {
   return { stores, loading, error }
 }
 
+export function useStoreRegisterApiUrl(storeId: string) {
+  const [apiUrl, setApiUrl] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    async function loadApiUrl() {
+      try {
+        setLoading(true)
+        const url = await storesApi.getRegisterApiUrl(storeId)
+        setApiUrl(url)
+      } catch (err) {
+        setError(err as Error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadApiUrl()
+  }, [storeId])
+
+  return { apiUrl, loading, error }
+}
+
 export function useStoreBankAccount(storeId: string) {
   const [bankAccount, setBankAccount] = useState<string>("")
   const [loading, setLoading] = useState(true)

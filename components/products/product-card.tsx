@@ -85,7 +85,12 @@ export function ProductCard({ product, storeId }: ProductCardProps) {
         </Card>
       </div>
 
-      <ProductQuickView product={product} storeId={storeId} open={showQuickView} onOpenChange={setShowQuickView} />
+     <ProductQuickView
+        product={product}
+        storeId={storeId}  
+        open={showQuickView}
+        onOpenChange={setShowQuickView}
+      />
     </>
   )
 }

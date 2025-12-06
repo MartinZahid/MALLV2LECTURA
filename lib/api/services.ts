@@ -1,12 +1,12 @@
 // API layer for services - calls external APIs configured in stores
 export const servicesApi = {
   // Fetch services from a store's external API
-  async getByStore(storeSlug: string): Promise<any[]> {
-    const response = await fetch(`/api/stores/${storeSlug}/services`)
+  async getByStore(storeId: number): Promise<any[]> {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/catalogo/${storeId}`)
     if (!response.ok) throw new Error("Failed to fetch services")
 
     const data = await response.json()
-    return data.services || []
+    return data
   },
 
   // Check availability for a specific service and date

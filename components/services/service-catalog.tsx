@@ -26,7 +26,7 @@ interface ServiceCatalogProps {
 }
 
 export function ServiceCatalog({ store }: ServiceCatalogProps) {
-  const { services, loading } = useServices(store.slug)
+  const { services, loading } = useServices(store.store_id)
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const router = useRouter()
 

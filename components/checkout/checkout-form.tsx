@@ -18,6 +18,9 @@ import type { CartItem, UserAddress, UserPaymentMethod } from "@/lib/types/datab
 import Image from "next/image"
 import { TransactionRequest, TransactionResponse } from "@/lib/types/transaction"
 import { storesApi } from "@/lib/api/stores"
+import { VentaProductoRequest } from "@/lib/types/venta_registro"
+import { ventaProductoApi } from "@/lib/api/venta_productos"
+import { useStoreRegisterApiUrl } from "@/hooks/use-stores"
 
 interface CheckoutFormProps {
   cartItems: CartItem[]
@@ -41,8 +44,9 @@ export function CheckoutForm({
   const [showPaymentDialog, setShowPaymentDialog] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const { toast } = useToast()
+  const { apiUrl, loading: apiUrlLoading, error: apiUrlError } = useStoreRegisterApiUrl(storeId)
   const router = useRouter()
-  
+
   const subtotal = initialCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const tax = subtotal * 0.16
   const shipping = deliveryType === "delivery" ? 5.0 : 0
@@ -81,7 +85,7 @@ export function CheckoutForm({
       const numeroDestino = await storesApi.getStoreBankAccount(storeId);
       console.log("DESTINO:", numeroDestino);
 
-      
+
       // 2. PREPARAR LA SOLICITUD DE TRANSACCIÓN (Nexus API)
       const transactionData: TransactionRequest = {
         numero_tarjeta_origen: paymentDetails.card_number || "", // Debe ser el número completo
@@ -97,7 +101,7 @@ export function CheckoutForm({
       const transactionResponse: TransactionResponse = await bankApi.createTransaction(transactionData)
 
       // 4. VERIFICAR LA RESPUESTA DE PAGO
-      if (transactionResponse.NombreEstado !== "APROBADA") { // Asumiendo que 'APROBADA' es el estado de éxito
+      if (transactionResponse.NombreEstado !== "COMPLETADA") { // Asumiendo que 'APROBADA' es el estado de éxito
         toast({
           title: "Pago Rechazado",
           description: `La transacción fue rechazada: ${transactionResponse.Descripcion}`,
@@ -109,7 +113,7 @@ export function CheckoutForm({
       // El pago fue exitoso, ahora creamos la orden en Supabase
 
       const orderNumber = `NX-${Date.now().toString(36).toUpperCase()}`
-      
+
       // Create order
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -117,7 +121,7 @@ export function CheckoutForm({
           user_id: user.id,
           order_number: orderNumber,
           total_amount: total,
-          status: "processing", // Cambia a processing si el pago es exitoso
+          status: "pending", // Cambia a processing si el pago es exitoso
           payment_status: "paid", // Cambia a 'paid'
           payment_method_id: selectedPayment,
           shipping_address_id: deliveryType === "delivery" ? selectedAddress : null,
@@ -125,7 +129,7 @@ export function CheckoutForm({
           estimated_delivery:
             deliveryType === "delivery" ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() : null,
           // Guardar referencia de pago
-          transaction_id: transactionResponse.IdTransaccion, 
+          transaction_id: transactionResponse.IdTransaccion,
           authorization_code: transactionResponse.NumeroAutorizacion,
         })
         .select()
@@ -133,14 +137,33 @@ export function CheckoutForm({
 
       if (orderError) throw orderError
 
-      // ... (Creación de order items, tracking y limpieza de carrito) ...
+      try {
+        for (const item of initialCartItems) {
+          const payload: VentaProductoRequest = {
+            id: 0, // tu API ignora este ID porque es SERIAL, ¿verdad?
+            store_id: Number(storeId),
+            order_id: order.id,
+            product_external_id: item.product_external_id,
+            price: item.price,
+            quantity: item.quantity,
+            size: item.size || null,
+            color: item.color || null,
+            created_at: new Date().toISOString(),
+            payment_status: "paid",
+            api_url: useStoreRegisterApiUrl(storeId).apiUrl,
+          }
 
-      toast({
-        title: "Pedido realizado y pagado",
-        description: `Tu pedido ${orderNumber} ha sido procesado y el pago ha sido exitoso.`,
-      })
-
-      router.push(`/orders/${order.id}`)
+          const registroVenta = await ventaProductoApi.registerSale(payload)
+          console.log("Venta registrada:", registroVenta)
+        }
+      } catch (err) {
+        console.error("Error registrando venta:", err)
+        toast({
+          title: "Error registrando venta",
+          description: "El pago fue exitoso, pero no se registró la venta.",
+          variant: "destructive",
+        })
+      }
     } catch (error: any) {
       toast({
         title: "Error al procesar pedido",
