@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation" // Importar useRouter para la navegación manual
 import { CartItemCard } from "./cart-item-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingBag, Sparkles } from "lucide-react"
+import { ShoppingBag, Sparkles, Loader2 } from "lucide-react" // Importar Loader2 para indicar carga
 import Link from "next/link"
 import type { CartItem } from "@/lib/types/database"
+import { availabilityApi } from "@/lib/api/availability" // Importar la API de disponibilidad
+import { useToast } from "@/hooks/use-toast" // Importar hook para notificaciones
 
 interface CartContentProps {
   initialCartItems: CartItem[]
@@ -16,6 +19,12 @@ interface CartContentProps {
 export function CartContent({ initialCartItems }: CartContentProps) {
   const [cartItems, setCartItems] = useState<CartItem[]>(initialCartItems)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set(initialCartItems.map((item) => item.id)))
+  
+
+  const [isCheckingStock, setIsCheckingStock] = useState(false)
+  
+  const router = useRouter()
+  const { toast } = useToast()
 
   // Group items by store
   const itemsByStore = useMemo(() => {
@@ -69,6 +78,54 @@ export function CartContent({ initialCartItems }: CartContentProps) {
       }
       return newSet
     })
+  }
+
+  //proceso de validacion de stcok 
+  const handleProceedToCheckout = async () => {
+    if (availableSelectedItems.length === 0) return
+
+    setIsCheckingStock(true)
+    const outOfStockItems: string[] = []
+
+    try {
+    
+      await Promise.all(
+        availableSelectedItems.map(async (item) => {
+          if (item.store && item.store.store_id) {
+            const hasStock = await availabilityApi.checkStock(
+              item.store.store_id,
+              item.product_external_id,
+              item.quantity
+            )
+
+            if (!hasStock) {
+              outOfStockItems.push(item.product_name)
+            }
+          }
+        })
+      )
+
+      if (outOfStockItems.length > 0) {
+      
+        toast({
+          title: "Stock insuficiente",
+          description: `Los siguientes productos ya no tienen stock suficiente: ${outOfStockItems.join(", ")}. Por favor ajusta las cantidades.`,
+          variant: "destructive",
+        })
+      } else {
+       
+        router.push("/checkout")
+      }
+    } catch (error) {
+      console.error("Error verificando stock:", error)
+      toast({
+        title: "Error",
+        description: "Hubo un problema al verificar la disponibilidad. Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCheckingStock(false)
+    }
   }
 
   const selectedCartItems = cartItems.filter((item) => selectedItems.has(item.id))
@@ -185,12 +242,25 @@ export function CartContent({ initialCartItems }: CartContentProps) {
                 </p>
               )}
 
-              <Link href="/checkout" className={availableSelectedItems.length === 0 ? "pointer-events-none" : ""}>
-                <Button className="w-full group" size="lg" disabled={availableSelectedItems.length === 0}>
-                  Proceder al Pago
-                  <span className="ml-2 inline-block group-hover:translate-x-1 transition-transform">→</span>
-                </Button>
-              </Link>
+              {/* Botón modificado para usar onClick y validar stock */}
+              <Button 
+                className="w-full group" 
+                size="lg" 
+                disabled={availableSelectedItems.length === 0 || isCheckingStock}
+                onClick={handleProceedToCheckout}
+              >
+                {isCheckingStock ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verificando stock...
+                  </>
+                ) : (
+                  <>
+                    Proceder al Pago
+                    <span className="ml-2 inline-block group-hover:translate-x-1 transition-transform">→</span>
+                  </>
+                )}
+              </Button>
 
               <Link href="/stores">
                 <Button variant="outline" className="w-full bg-transparent hover:bg-primary/5">

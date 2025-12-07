@@ -12,6 +12,8 @@ import { authApi } from "@/lib/api/auth"
 import type { CartItem } from "@/lib/types/database"
 import { Badge } from "@/components/ui/badge"
 
+import { availabilityApi } from "@/lib/api/availability"
+
 interface CartItemCardProps {
   item: CartItem
   isSelected: boolean
@@ -27,6 +29,25 @@ export function CartItemCard({ item, isSelected, onToggleSelect, onRemove, onUpd
   const handleQuantityChange = async (newQuantity: number) => {
     setIsUpdating(true)
     try {
+      if (item.store && item.store.store_id) {
+        // Llamamos  API de disponibilidad
+        const hasStock = await availabilityApi.checkStock(
+          item.store.store_id, 
+          item.product_external_id, 
+          newQuantity
+        )
+
+        if (!hasStock) {
+          toast({
+            title: "Stock insuficiente",
+            description: `No hay ${newQuantity} unidades disponibles en la tienda.`,
+            variant: "destructive",
+          })
+          return 
+        }
+      }
+
+
       await cartApi.updateQuantity(item.id, newQuantity)
       onUpdate({ ...item, quantity: newQuantity })
       toast({

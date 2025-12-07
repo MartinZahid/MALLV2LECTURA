@@ -65,7 +65,7 @@ export function ProductQuickView({ product, storeId, open, onOpenChange }: Produ
         return
       }
 
-      // Validaciones básicas
+      
       if (product.sizes?.length && !selectedSize) {
         toast({ title: "Falta talla", description: "Selecciona una talla", variant: "destructive" })
         return

@@ -1,4 +1,4 @@
-import { createClient, getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 import type { CartItem } from "@/lib/types/database"
 
 export const cartApi = {
@@ -14,7 +14,6 @@ export const cartApi = {
     if (error) throw error
     return data || []
   },
-  
 
   // Add item to cart
   async addItem(item: Omit<CartItem, "id" | "added_at">): Promise<CartItem> {
@@ -27,18 +26,11 @@ export const cartApi = {
   },
 
   // Update cart item quantity
-// Agrega esta nueva función:
-  updateQuantity: async (itemId: string, quantity: number) => {
-    const supabase = getSupabaseBrowserClient()
-    const { data, error } = await supabase
-      .from("cart_items") // Asegúrate que tu tabla se llame así
-      .update({ quantity: quantity })
-      .eq("id", itemId)
-      .select()
-      .single()
+  async updateQuantity(itemId: string, quantity: number): Promise<void> {
+    const supabase = createClient()
+    const { error } = await supabase.from("cart_items").update({ quantity }).eq("id", itemId)
 
     if (error) throw error
-    return data
   },
 
   // Remove item from cart
