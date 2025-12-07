@@ -39,13 +39,23 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [bookingLoading, setBookingLoading] = useState(false)
+  const [slotsLoading, setSlotsLoading] = useState(false) // Nuevo estado para carga de horarios
   const { toast } = useToast()
   const router = useRouter()
 
   useEffect(() => {
     async function fetchServices() {
+      if (!store?.slug) return;
+
       try {
-        const response = await fetch(`/api/stores/${store.slug}/services`)
+        const url = `/api/stores/${store.slug}/service`
+        console.log(`[DEBUG] Fetching services from: ${url}`)
+        
+        const response = await fetch(url)
+        if (!response.ok) {
+            throw new Error(`Status: ${response.status}`)
+        }
+
         const data = await response.json()
         setServices(data.services || [])
         
@@ -56,10 +66,10 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
           }
         }
       } catch (error) {
-        console.error("[v0] Error fetching services:", error)
+        console.error("[DEBUG] Error fetching services:", error)
         toast({
-          title: "Error",
-          description: "No se pudieron cargar los servicios",
+          title: "Error de conexión",
+          description: "No se pudieron cargar los servicios. Intenta recargar.",
           variant: "destructive",
         })
       } finally {
@@ -68,16 +78,22 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
     }
 
     fetchServices()
-  }, [store.slug, preselectedServiceId, toast])
+  }, [store.slug, preselectedServiceId, toast, store])
 
   useEffect(() => {
     if (selectedDate && selectedService) {
+      setSelectedTime("")
       fetchAvailableSlots()
+    } else {
+      setAvailableSlots([]) // Limpiar slots si no hay fecha/servicio
     }
   }, [selectedDate, selectedService])
 
   async function fetchAvailableSlots() {
     if (!selectedDate || !selectedService) return
+
+    setSlotsLoading(true) // Iniciar carga
+    setAvailableSlots([]) // Limpiar slots anteriores mientras carga
 
     try {
       const dateStr = selectedDate.toISOString().split("T")[0]
@@ -93,14 +109,16 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
         description: "No se pudo cargar la disponibilidad",
         variant: "destructive",
       })
+    } finally {
+      setSlotsLoading(false) // Finalizar carga
     }
   }
 
   const handleBooking = async () => {
     if (!selectedService || !selectedDate || !selectedTime) {
       toast({
-        title: "Información incompleta",
-        description: "Por favor selecciona un servicio, fecha y hora",
+        title: "Faltan datos",
+        description: "Por favor selecciona servicio, fecha y hora",
         variant: "destructive",
       })
       return
@@ -110,21 +128,20 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
 
     try {
       const supabase = getSupabaseBrowserClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
-        toast({
-          title: "Error",
-          description: "Debes iniciar sesión para agendar una cita",
-          variant: "destructive",
-        })
+        toast({ title: "Inicia sesión", description: "Requerido para agendar", variant: "destructive" })
         router.push(`/auth/login?redirect=/stores/${store.slug}/book`)
         return
       }
 
-      const confirmationCode = `${store.slug.toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
+      const year = selectedDate.getFullYear()
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
+      const day = String(selectedDate.getDate()).padStart(2, '0')
+      const dateStr = `${year}-${month}-${day}`
+
+      const confirmationCode = `${store.slug.substring(0,3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
 
       const { data, error } = await supabase
         .from("appointments")
@@ -135,7 +152,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
           service_name: selectedService.name,
           service_description: selectedService.description,
           price: selectedService.price,
-          appointment_date: selectedDate.toISOString().split("T")[0],
+          appointment_date: dateStr,
           appointment_time: selectedTime,
           duration_minutes: selectedService.duration_minutes,
           status: "scheduled",
@@ -149,15 +166,15 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
 
       toast({
         title: "¡Cita agendada!",
-        description: `Tu cita ha sido agendada exitosamente. Código: ${confirmationCode}`,
+        description: `Código: ${confirmationCode}`,
       })
 
       router.push(`/appointments/${data.id}`)
     } catch (error: any) {
-      console.error("[v0] Booking error:", error)
+      console.error("[DEBUG] Booking error:", error)
       toast({
         title: "Error al agendar",
-        description: error.message || "No se pudo agendar la cita",
+        description: error.message || "Intenta nuevamente",
         variant: "destructive",
       })
     } finally {
@@ -173,9 +190,10 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
     )
   }
 
+  const visibleSlots = availableSlots.filter(slot => slot.available);
+
   return (
     <div className="grid lg:grid-cols-3 gap-8">
-      {/* Service Selection */}
       <div className="lg:col-span-2 space-y-6">
         <Card>
           <CardHeader>
@@ -184,7 +202,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
           <CardContent>
             {services.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                No hay servicios disponibles en este momento
+                No hay servicios disponibles
               </p>
             ) : (
               <RadioGroup
@@ -193,7 +211,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
               >
                 <div className="space-y-4">
                   {services.map((service) => (
-                    <div key={service.id} className="flex items-start space-x-3">
+                    <div key={service.id} className="flex items-start space-x-3 p-2 rounded hover:bg-muted/50 transition-colors">
                       <RadioGroupItem value={service.id} id={service.id} className="mt-1" />
                       <Label htmlFor={service.id} className="flex-1 cursor-pointer">
                         <div className="space-y-1">
@@ -202,7 +220,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
                             <p className="font-bold text-primary">${service.price.toFixed(2)}</p>
                           </div>
                           <p className="text-sm text-muted-foreground">{service.description}</p>
-                          <p className="text-xs text-muted-foreground">{service.duration_minutes} minutos</p>
+                          <p className="text-xs text-muted-foreground">⏱ {service.duration_minutes} min</p>
                         </div>
                       </Label>
                     </div>
@@ -214,26 +232,39 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
         </Card>
 
         {selectedService && (
-          <Card>
+          <Card className="animate-in fade-in slide-in-from-bottom-4">
             <CardHeader>
               <CardTitle>2. Selecciona Fecha y Hora</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
-                <Label className="mb-3 block">Fecha</Label>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={(date) => date < new Date() || date.getDay() === 0}
-                  className="rounded-md border border-border"
-                />
+                <Label className="mb-3 block font-medium">Fecha</Label>
+                <div className="flex justify-center border rounded-md p-4 bg-card">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        // Solo bloqueamos días estrictamente en el pasado
+                        return date < today;
+                    }}
+                    className="rounded-md"
+                  />
+                </div>
               </div>
 
               {selectedDate && (
-                <div>
-                  <Label className="mb-3 block">Hora Disponible</Label>
-                  {availableSlots.length > 0 ? (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                  <Label className="mb-3 block font-medium">Hora Disponible</Label>
+                  
+                  {/* Mostrar spinner mientras carga, o los slots, o mensaje de vacío */}
+                  {slotsLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Spinner className="h-8 w-8" />
+                    </div>
+                  ) : availableSlots.length > 0 ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {availableSlots.map((slot) => (
                         <Button
@@ -257,58 +288,67 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
         )}
       </div>
 
-      {/* Booking Summary */}
       <div className="lg:col-span-1">
-        <Card className="sticky top-20">
-          <CardHeader>
+        <Card className="sticky top-24 shadow-lg border-primary/10">
+          <CardHeader className="bg-muted/30 pb-4">
             <CardTitle>Resumen de Cita</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-6">
             {selectedService ? (
               <>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Servicio</p>
-                  <p className="font-semibold text-foreground">{selectedService.name}</p>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Servicio</p>
+                  <p className="font-medium text-foreground">{selectedService.name}</p>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Duración</p>
-                  <p className="font-semibold text-foreground">{selectedService.duration_minutes} minutos</p>
+                
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Duración</p>
+                  <p className="font-medium text-foreground">{selectedService.duration_minutes} min</p>
                 </div>
-                {selectedDate && (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Fecha</p>
-                    <p className="font-semibold text-foreground">
-                      {selectedDate.toLocaleDateString("es-MX", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                )}
-                {selectedTime && (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Hora</p>
-                    <p className="font-semibold text-foreground">{selectedTime}</p>
-                  </div>
-                )}
-                <div className="h-px bg-border" />
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Total</p>
+
+                <div className="h-px bg-border my-2" />
+
+                <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Fecha</p>
+                    {selectedDate ? (
+                        <p className="font-medium text-foreground capitalize">
+                            {selectedDate.toLocaleDateString("es-MX", { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </p>
+                    ) : <span className="text-sm text-muted-foreground italic">--</span>}
+                </div>
+
+                <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Hora</p>
+                    {selectedTime ? (
+                        <p className="font-medium text-foreground">{selectedTime}</p>
+                    ) : <span className="text-sm text-muted-foreground italic">--</span>}
+                </div>
+
+                <div className="h-px bg-border my-2" />
+                
+                <div className="flex justify-between items-center">
+                  <p className="text-sm font-medium text-muted-foreground">Total</p>
                   <p className="text-2xl font-bold text-primary">${selectedService.price.toFixed(2)}</p>
                 </div>
+
                 <Button
-                  className="w-full"
+                  className="w-full mt-4"
                   size="lg"
                   onClick={handleBooking}
                   disabled={!selectedService || !selectedDate || !selectedTime || bookingLoading}
                 >
-                  {bookingLoading ? "Agendando..." : "Confirmar Cita"}
+                  {bookingLoading ? (
+                    <>
+                      <Spinner className="mr-2 h-4 w-4" />
+                      Procesando...
+                    </>
+                  ) : "Confirmar Cita"}
                 </Button>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">Selecciona un servicio para continuar</p>
+              <div className="text-center py-10 opacity-50">
+                <p>Selecciona un servicio</p>
+              </div>
             )}
           </CardContent>
         </Card>
