@@ -36,9 +36,11 @@ export const storesApi = {
       .eq("id", storeId)
       .single()
 
+    console.log("Api obtenida: ", data.registro_venta_api)
+
     if (error) throw error
     if (!data) throw new Error("Store API URL not found for storeCode: " + storeId)
-    return data.register_api_url
+    return data.registro_venta_api
   },
   async getStoreBankAccount(storeId: string): Promise<string> {
     const supabase = createClient()

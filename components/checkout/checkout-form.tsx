@@ -18,7 +18,7 @@ import type { CartItem, UserAddress, UserPaymentMethod } from "@/lib/types/datab
 import Image from "next/image"
 import { TransactionRequest, TransactionResponse } from "@/lib/types/transaction"
 import { storesApi } from "@/lib/api/stores"
-import { VentaProductoRequest } from "@/lib/types/venta_registro"
+import { VentaRequest } from "@/lib/types/venta_registro"
 import { ventaProductoApi } from "@/lib/api/venta_productos"
 import { useStoreRegisterApiUrl } from "@/hooks/use-stores"
 
@@ -128,7 +128,6 @@ export function CheckoutForm({
           delivery_type: deliveryType,
           estimated_delivery:
             deliveryType === "delivery" ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() : null,
-          // Guardar referencia de pago
           transaction_id: transactionResponse.IdTransaccion,
           authorization_code: transactionResponse.NumeroAutorizacion,
         })
@@ -139,23 +138,69 @@ export function CheckoutForm({
 
       try {
         for (const item of initialCartItems) {
-          const payload: VentaProductoRequest = {
-            id: 0, // tu API ignora este ID porque es SERIAL, ¿verdad?
-            store_id: Number(storeId),
+          // Create order items
+          const { error: orderItemError } = await supabase.from("order_items").insert({
             order_id: order.id,
             product_external_id: item.product_external_id,
-            price: item.price,
+            product_name: item.product_name,
             quantity: item.quantity,
+            price: item.price,
             size: item.size || null,
             color: item.color || null,
-            created_at: new Date().toISOString(),
-            payment_status: "paid",
-            api_url: useStoreRegisterApiUrl(storeId).apiUrl,
-          }
+            store_id: storeId,
+            product_image_url: item.product_image_url || null,
+          })
 
-          const registroVenta = await ventaProductoApi.registerSale(payload)
-          console.log("Venta registrada:", registroVenta)
+          if (orderItemError) throw orderItemError
         }
+
+        // Clear user's cart
+        const { error: clearCartError } = await supabase.from("cart_items").delete().eq("user_id", user.id)
+        if (clearCartError) throw clearCartError
+
+        const products = initialCartItems.map((item) => ({
+          external_id: item.product_external_id,
+          quantity: item.quantity,
+          size: item.size || null,
+          color: item.color || null
+        }));
+
+        const selectedAddressData = addresses.find(
+          (a) => a.id === selectedAddress
+        )
+
+        const client = {
+          nombre: user.user_metadata.full_name || "",
+          email: user.email,
+          telefono: user.user_metadata?.phone || "",
+          direccion: selectedAddressData
+            ? `${selectedAddressData.street}, ${selectedAddressData.city}, ${selectedAddressData.state}, ${selectedAddressData.postal_code}`
+            : "Recoger en tienda"
+        }
+
+        const payload = {
+          id: order.id,
+          order_id: order.order_number,
+          price: total,
+          products: products,
+          datos_cliente: client,
+          created_at: new Date().toISOString(),
+          payment_status: "paid",
+          api_url: apiUrl,
+        };
+
+        console.log("Payload enviado: ", payload)
+
+        const registroVenta = await ventaProductoApi.registerSale(payload);
+
+        console.log("Respuesta externa: ", registroVenta)
+
+        toast({
+          title: "Pedido registrado",
+          description: "La tienda ha recibido tu compra.",
+        });
+
+         router.push(`/orders/${order.id}`)
       } catch (err) {
         console.error("Error registrando venta:", err)
         toast({

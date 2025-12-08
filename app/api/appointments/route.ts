@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 })
     }
 
-    // 2. Obtener datos de la tienda (para obtener el ID numérico y la URL de la API externa)
+  
     const { data: store, error: storeError } = await supabase
       .from("stores")
       .select("store_id, registro_venta_api, name")
@@ -37,10 +37,10 @@ export async function POST(request: NextRequest) {
     }
 
     const numericStoreId = Number(store.store_id)
-    // Usamos la URL de la BD si existe, si no, usamos la default (SPA)
+    
     const targetApiUrl = store.registro_venta_api || DEFAULT_TARGET_API_URL
 
-    // 3. Guardar cita en Supabase (Base de datos local)
+
     const { data: appointment, error: appError } = await supabase
       .from("appointments")
       .insert({
@@ -65,10 +65,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Error al guardar la cita localmente" }, { status: 500 })
     }
 
-    // 4. Guardar cita en API Externa (vía Nexus Middleware)
+    // 4. Guardar cita en API Externa 
     const payload = {
       id: appointment.id, // UUID de la cita local
-      user_id: user.id,   // ID del usuario en sesión
+      user_id: user.id,   
       store_id: numericStoreId,
       service_external_id: body.service_external_id,
       service_name: body.service_name,
@@ -95,8 +95,7 @@ export async function POST(request: NextRequest) {
 
       if (!response.ok) {
         console.error(`[BOOKING] Error en Nexus API: ${response.status} ${response.statusText}`)
-        // Nota: La cita local ya se creó, así que retornamos éxito al usuario aunque falle la externa
-        // Podrías actualizar el estado en Supabase a "sync_failed" si quisieras manejarlo
+        
       } else {
         const nexusData = await response.json()
         console.log(`[BOOKING] Respuesta Nexus:`, nexusData)

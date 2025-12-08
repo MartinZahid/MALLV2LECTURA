@@ -107,8 +107,8 @@ export function useStoreRegisterApiUrl(storeId: string) {
 
   useEffect(() => {
     async function loadApiUrl() {
+      setLoading(true)
       try {
-        setLoading(true)
         const url = await storesApi.getRegisterApiUrl(storeId)
         setApiUrl(url)
       } catch (err) {

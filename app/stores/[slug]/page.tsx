@@ -28,7 +28,7 @@ export default async function StorePage({ params }: StorePageProps) {
       <Header />
       <main className="flex-1">
         <StoreHeader store={store} />
-        <ProductGrid storeId={store.storeId} storeType={store.type} />
+        <ProductGrid storeId={store.store_id} storeType={store.type} />
       </main>
       <Footer />
     </div>

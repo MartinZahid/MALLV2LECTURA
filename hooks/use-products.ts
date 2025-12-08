@@ -15,10 +15,14 @@ export function useProducts(storeId?: number) {
         setLoading(true)
 
         let data
+        
+        console.log("useProducts called with storeId:", storeId)
 
         if (storeId) {
+          console.log("Fetching products for store ID:", storeId)
           data = await productsApi.getByStore(storeId)
         } else {
+          console.log("Fetching products for all stores")
           const stores = await storesApi.getProductStores()
           const storeData = stores.map(s => ({ id: s.store_id, name: s.name }))
           data = await productsApi.getAll(storeData)
@@ -32,7 +36,7 @@ export function useProducts(storeId?: number) {
           name: p.nombre,
           description: p.description,
           price: p.precio,
-          image_url: "/placeholder.png", // Si no tienes imagen
+          image_url: p.image_url || "/placeholder.png", // Si no tienes imagen
           category: "general",
           sizes: p.talla ? [p.talla] : [],
           colors: p.color ? [p.color] : [],
