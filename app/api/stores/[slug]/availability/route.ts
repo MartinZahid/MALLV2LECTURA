@@ -7,22 +7,6 @@ const NEXUS_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 // LA ÚNICA URL externa que se usará para validar disponibilidad
 const TARGET_API_URL = "http://api-servicios-spa.rtakabinetsolutions.com/api/disponibilidad";
 
-// Mapa de respaldo de IDs de TIENDA
-const STORE_ID_MAP: Record<string, number> = {
-  "urban-style": 1,
-  "cafe-nexus": 2,
-  "barber-studio": 3,
-  "zen-spa": 4,
-  "dreams-kingdom-spa": 2 // ID 2 según tus capturas de curl
-};
-
-// NUEVO: Mapa de respaldo para IDs de SERVICIO (Traducción de ID interno a Externo)
-const SERVICE_ID_MAP: Record<string, string> = {
-  "1": "SPA-SERV-001", // Mapeamos el "1" que envía el frontend al código real
-  "2": "SPA-SERV-002", 
-  "3": "SPA-SERV-003"
-};
-
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const searchParams = request.nextUrl.searchParams
@@ -36,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const supabase = await createClient()
 
-    // 1. Obtener datos básicos de la tienda
+    // 1. Obtener datos básicos de la tienda (necesario para verificar citas locales en Supabase)
     const { data: store, error: storeError } = await supabase
       .from("stores")
       .select("id, store_id")
@@ -47,11 +31,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Store not found" }, { status: 404 })
     }
 
-    // Convertir IDs usando los mapas de respaldo
-    const numericStoreId = Number(store.store_id) || STORE_ID_MAP[slug] || 0;
+    // Usamos directamente el ID numérico de la tienda que viene de la BD
+    const numericStoreId = Number(store.store_id);
     
-    // FIX CLAVE: Traducir el ID del servicio (ej: "1" -> "SPA-SERV-001")
-    const realServiceId = SERVICE_ID_MAP[serviceId] || serviceId;
+    // Usamos directamente el serviceId que viene del frontend (ya es el externo gracias al cambio anterior)
+    const realServiceId = serviceId;
 
     // 2. Generar horarios de 10:00 AM a 8:00 PM (20:00)
     const allSlots: string[] = []
@@ -65,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    // 3. Consultar Supabase (Citas locales)
+    
     const { data: bookedSlots, error: slotsError } = await supabase
       .from("appointments")
       .select("appointment_time")
@@ -80,11 +64,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const bookedTimes = new Set(bookedSlots.map((slot) => slot.appointment_time.slice(0, 5)))
 
-    // 4. Verificación con tu API de Python
-    console.log(`[AVAILABILITY] Consulta: Tienda ID ${numericStoreId} | Servicio "${realServiceId}" (Original: "${serviceId}") | Fecha ${date}`);
+   
+    console.log(`[AVAILABILITY] Consulta Directa: Tienda ${numericStoreId} | Servicio "${realServiceId}" | Fecha ${date}`);
 
     const availabilityChecks = allSlots.map(async (time) => {
-      // Si ya está en Supabase, la descartamos
+
       if (bookedTimes.has(time)) {
         return null;
       }
@@ -92,7 +76,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       try {
         const payload = {
           store_id: numericStoreId,
-          service_external_id: realServiceId, // Usamos el ID traducido
+          service_external_id: realServiceId, // Enviamos el ID directo
           appointment_date: date,
           appointment_time: time,
           api_url: TARGET_API_URL
@@ -112,14 +96,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
         const data = await response.json();
         
-        // Log solo si hay error o algo inesperado para no saturar, o descomentar para debug total
-        // console.log(`[AVAILABILITY] Resp [${time}]:`, JSON.stringify(data));
-
-        // Lógica de validación exacta según tu captura:
-        // Si hay una 'fecha_inicio' válida en el JSON, significa que hay disponibilidad.
-        // Si está ocupado/no encontrado, 'fecha_inicio' viene null.
+        // Si hay fecha_inicio, está disponible
         if (data.fecha_inicio) {
-          console.log(`[AVAILABILITY] ${time} -> DISPONIBLE ✅`);
           return { time, available: true };
         }
         
@@ -133,8 +111,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const results = await Promise.all(availabilityChecks)
     const availableSlots = results.filter((slot) => slot !== null)
-
-    console.log(`[AVAILABILITY] Total slots disponibles: ${availableSlots.length}`);
 
     return NextResponse.json({ slots: availableSlots })
 

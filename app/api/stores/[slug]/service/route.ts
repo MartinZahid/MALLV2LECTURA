@@ -27,29 +27,26 @@ export async function GET(
 
     console.log(`[API SERVICE] Tienda encontrada: ${store.name} (ID: ${store.store_id})`)
 
-    // 2. Obtener servicios desde la API externa
-    // Usamos un bloque try-catch específico para la llamada externa
-    // CORRECCIÓN AQUÍ: Agregamos el tipo explícito ': any[]'
     let services: any[] = []
     
     try {
       const rawData = await servicesApi.getByStore(store.store_id)
-      console.log(`[API SERVICE] Servicios crudos recibidos: ${Array.isArray(rawData) ? rawData.length : 'No array'}`)
       
-      // Mapeo seguro de datos
       if (Array.isArray(rawData)) {
+        // Asignamos id_servicio_externo a 'id' para que el frontend lo use automáticamente en la disponibilidad
         services = rawData.map((item: any) => ({
-          id: item.id?.toString() || item.servicio_id?.toString() || `temp-${Math.random()}`,
-          name: item.nombre || item.name || "Servicio sin nombre",
-          description: item.description || item.descripcion || "",
-          price: Number(item.precio || item.price || 0),
-          duration_minutes: Number(item.duracion_minutos || item.duration || 60),
-          category: item.category || item.categoria || "General",
+          id: item.id_servicio_externo?.toString() ?? item.id?.toString(), 
+          service_external_id: item.id_servicio_externo?.toString(),
+          name: item.nombre,
+          description: item.description,
+          price: item.precio,
+          duration_minutes: item.duracion_minutos,
+          category: item.category ?? "general",
+          image_url: item.image_url ?? null,
         }))
       }
     } catch (apiError) {
       console.error(`[API SERVICE] Error llamando a API externa para tienda ${store.store_id}:`, apiError)
-      // No fallamos toda la petición, devolvemos array vacío para que el front no explote
       services = [] 
     }
 

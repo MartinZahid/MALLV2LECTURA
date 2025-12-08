@@ -23,7 +23,7 @@ export const servicesApi = {
 
       const data = await response.json()
       
-      // Manejar si la API devuelve { "catalogo": [...] } o directamente [...]
+   
       if (Array.isArray(data)) return data
       if (data.catalogo && Array.isArray(data.catalogo)) return data.catalogo
       if (data.products && Array.isArray(data.products)) return data.products

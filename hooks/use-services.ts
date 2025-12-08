@@ -17,6 +17,7 @@ export function useServices(storeId: number) {
         // 🔥 MAPEO IMPORTANTE
         const mapped = data.map((item: any) => ({
           id: item.id?.toString(),
+          service_external_id: item.id_servicio_externo?.toString(),
           name: item.nombre,
           description: item.description,
           price: item.precio,

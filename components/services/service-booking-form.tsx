@@ -39,7 +39,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [bookingLoading, setBookingLoading] = useState(false)
-  const [slotsLoading, setSlotsLoading] = useState(false) // Nuevo estado para carga de horarios
+  const [slotsLoading, setSlotsLoading] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -85,15 +85,15 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
       setSelectedTime("")
       fetchAvailableSlots()
     } else {
-      setAvailableSlots([]) // Limpiar slots si no hay fecha/servicio
+      setAvailableSlots([])
     }
   }, [selectedDate, selectedService])
 
   async function fetchAvailableSlots() {
     if (!selectedDate || !selectedService) return
 
-    setSlotsLoading(true) // Iniciar carga
-    setAvailableSlots([]) // Limpiar slots anteriores mientras carga
+    setSlotsLoading(true)
+    setAvailableSlots([])
 
     try {
       const dateStr = selectedDate.toISOString().split("T")[0]
@@ -110,7 +110,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
         variant: "destructive",
       })
     } finally {
-      setSlotsLoading(false) // Finalizar carga
+      setSlotsLoading(false)
     }
   }
 
@@ -127,6 +127,7 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
     setBookingLoading(true)
 
     try {
+      // Verificar sesión antes de llamar a la API
       const supabase = getSupabaseBrowserClient()
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -143,11 +144,14 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
 
       const confirmationCode = `${store.slug.substring(0,3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
 
-      const { data, error } = await supabase
-        .from("appointments")
-        .insert({
-          user_id: user.id,
-          store_id: store.id,
+      // AHORA: Llamamos a nuestra nueva API interna en lugar de insertar directamente
+      const response = await fetch("/api/appointments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          store_id: store.id, // UUID de la tienda
           service_external_id: selectedService.id,
           service_name: selectedService.name,
           service_description: selectedService.description,
@@ -155,14 +159,15 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
           appointment_date: dateStr,
           appointment_time: selectedTime,
           duration_minutes: selectedService.duration_minutes,
-          status: "scheduled",
-          payment_status: "pending",
           confirmation_code: confirmationCode,
-        })
-        .select()
-        .single()
+        }),
+      })
 
-      if (error) throw error
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al procesar la cita")
+      }
 
       toast({
         title: "¡Cita agendada!",
@@ -189,8 +194,6 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
       </div>
     )
   }
-
-  const visibleSlots = availableSlots.filter(slot => slot.available);
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -247,7 +250,6 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
                     disabled={(date) => {
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        // Solo bloqueamos días estrictamente en el pasado
                         return date < today;
                     }}
                     className="rounded-md"
@@ -259,7 +261,6 @@ export function ServiceBookingForm({ store, preselectedServiceId }: ServiceBooki
                 <div className="animate-in fade-in slide-in-from-top-4 duration-500">
                   <Label className="mb-3 block font-medium">Hora Disponible</Label>
                   
-                  {/* Mostrar spinner mientras carga, o los slots, o mensaje de vacío */}
                   {slotsLoading ? (
                     <div className="flex justify-center py-8">
                       <Spinner className="h-8 w-8" />
